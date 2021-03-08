@@ -1,0 +1,87 @@
+- hosts: localhost
+  tasks:
+
+
+
+    # App001 VPC
+    - name: App001 VPC
+      register: vpc_app001
+      ec2_vpc_net:
+        name: "test-NETWK-NET-VPC-APP001"
+        cidr_block: "10.245.64.0/24"
+        region: "us-east-2"
+        tags:
+          Name: "test-NETWK-NET-VPC-APP001"
+          Description: "App VPC 001"
+          deployment_stage: "test"
+        tenancy: default
+
+    # Create VPC subnets
+    - name: Create subnet for AZ a
+      register: subnet_app001_a
+      ec2_vpc_subnet:
+        az: "us-east-2a"
+        state: present
+        vpc_id: "{{vpc_app001.vpc.id}}"
+        cidr: 10.245.64.0/26
+        tags:
+          Name: "test-SUBNET-APP001-AZa"
+
+    - name: Create subnet for AZ b
+      register: subnet_app001_b
+      ec2_vpc_subnet:
+        az: "us-east-2b"
+        state: present
+        vpc_id: "{{vpc_app001.vpc.id}}"
+        cidr: 10.245.64.64/26
+        tags:
+          Name: "test-SUBNET-APP001-AZb"
+
+
+    - name: Create a transit gateway
+      register: transit_gateway
+      ec2_transit_gateway:
+        description: "TEST-NETWK-NET-TGW-001"
+        region: "us-east-2"
+        auto_attach: yes
+        auto_associate: no
+        auto_propagate: no
+        dns_support: True
+        purge_tags: False
+        state: present
+        tags:
+          Name: "TEST-NET-TGW-001"
+          Description: "Transit Gateway"
+          deployment_stage: "test"
+
+    - name: VPC TGW attachment
+      register: tgw_attach_egress
+      ec2_transit_gateway_vpc_attachment:
+        region: "us-east-2"
+        transit_gateway_id: "{{transit_gateway.transit_gateway.transit_gateway_id}}"
+        vpc_id: "vpc-1234567890"
+        subnets:
+          - subnet-1a
+          - subnet-1b
+          - subnet-1c
+        tags:
+          Name: "TEST-TGW-ATTACH-EGRESS"
+          Description: "Test VPC TGW Attachment"
+          deployment_stage: "production"
+
+    - name: Set up TGW route table
+      register: tgw_route_table
+      ec2_transit_gateway_route_table:
+        region: "us-east-2"
+        tgw_id: "{{transit_gateway.transit_gateway.transit_gateway_id}}"
+        lookup: tag
+        associations:
+          - "{{tgw_attach_ingress.transit_gateway_vpc_attachment.transit_gateway_attachment_id}}"
+        routes:
+          - dest_cidr: "10.245.64.0/24"
+            tgw_attachment_id: "{{tgw_attach_ingress.transit_gateway_vpc_attachment.transit_gateway_attachment_id}}"
+        tags:
+          Name: "USE1-TGW-ROUTE_TABLE"
+          Description: "TGW Route Table"
+          deployment_stage: "test"
+
